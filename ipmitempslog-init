@@ -1,0 +1,120 @@
+#!/bin/bash
+# Script to place an ipmitool temperature-grabbing script as
+#  a service for more sensible running.
+#
+# Written by John Williamson - blame him.
+#
+### BEGIN INIT INFO
+# Provides:             ipmitemps
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    ipmi temp logging
+# Description:          Start the ipmitool temperature logging script.
+#                       This dumps temperature information into syslog so
+#                       that Splunk may be abused for pretty graphs.
+### END INIT INFO
+PATH=$PATH:/bin:/usr/bin:/sbin:/usr/sbin:/usr/site/rcac/scripts
+export PATH
+progfile="/sbin/ipmitempslog"
+#lockfile=${LOCKFILE-/var/lock/subsys/puppet}
+pidfile=${PIDFILE-/var/run/ipmitempslog.pid}
+ipmitempsd='/sbin/ipmitempslog'
+prog=$(basename $progfile)
+opts=''
+
+#Source function library.
+. /etc/init.d/functions
+
+# Can we use -p?
+#if status | grep -q -- '-p' 2>/dev/null; then
+#    daemonopts="--pidfile $pidfile"
+#    pidopts="-p $pidfile"
+#fi
+
+eval_cmd() {
+  local rc=$1
+  if [ $rc -eq 0 ]; then
+    echo '[  OK  ]'
+  else
+    echo '[FAILED]'
+  fi
+  return $rc
+}
+
+start() {
+    local pids=$(pgrep $prog)
+    if [ -n "$pids" ]; then
+        echo "$prog (pid $pids) is already running"
+        return 0
+    fi
+    printf "%-50s%s" "Starting $prog: " ''
+    $progfile $opts &
+    echo $! > $pidfile
+#   (daemon $daemonopts $ipmitempsd &)
+#   RETVAL=$?
+#   echo
+#       [ $RETVAL = 0 ] && touch ${lockfile}
+#       return $RETVAL
+    pgrep $prog &>/dev/null
+    eval_cmd $?
+}
+
+stop() {
+#   echo -n $"Stopping ipmitempslog: "
+#   killproc $pidopts $ipmitempsd
+#   RETVAL=$?
+#   echo
+#   [ $RETVAL = 0 ] && rm -f ${lockfile} ${pidfile}
+  local pids=$(pgrep $prog)
+
+  if [ -z "$pids" ]; then
+    echo "$prog not running"
+    return 0
+  fi
+  printf "%-50s%s" "Stopping $prog: " ''
+  rm -f $pidfile
+  kill -9 $pids
+  eval_cmd $?
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    echo -n $"Restarting ipmitempslog: "
+    killproc $pidopts $ipmitempsd -HUP
+    RETVAL=$?
+    echo
+    return $RETVAL
+}
+
+status() {
+    status $pidopts $ipmitempsd
+    RETVAL=$?
+    return $RETVAL
+}
+
+
+
+case "$1" in
+    start)
+        start
+    ;;
+    stop)
+        stop
+    ;;
+    restart)
+        restart
+    ;;
+    reload|force-reload)
+        reload
+    ;;
+    status)
+        status
+    ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|reload|force-reload}"
+        exit 1
+esac
